@@ -4,7 +4,7 @@ import sqlite3
 
 app = Flask(__name__)
 
-# DB 연결 함수
+# DB 연결
 def db():
     conn = sqlite3.connect("data.db")
     return conn
@@ -19,7 +19,7 @@ with db() as conn:
     )
     """)
 
-# 장부 테이블 생성
+# 기록 테이블 생성
 with db() as conn:
     conn.execute("""
     CREATE TABLE IF NOT EXISTS records(
@@ -47,7 +47,7 @@ def login():
     else:
         return jsonify({"success": False})
 
-# 장부 작성 API
+# 장부 기록 추가
 @app.route("/add_record", methods=["POST"])
 def add_record():
     data = request.json
@@ -62,7 +62,7 @@ def add_record():
 
     return jsonify({"success": True})
 
-# 장부 기록 조회 API
+# 장부 전체 조회
 @app.route("/get_records", methods=["GET"])
 def get_records():
     with db() as conn:
@@ -71,6 +71,6 @@ def get_records():
 
     return jsonify(rows)
 
-# Flask 실행
+# 서버 실행
 if __name__ == "__main__":
     app.run()
