@@ -1,224 +1,170 @@
 from flask import Flask, request, jsonify
+import psycopg2
+from psycopg2.extras import RealDictCursor
 from datetime import datetime
-import sqlite3
+import os
 
 app = Flask(__name__)
 
+# ================================
+# PostgreSQL 접속 함수
+# ================================
+def get_conn():
+    return psycopg2.connect(
+        host=os.environ.get("PGHOST"),
+        dbname=os.environ.get("PGDATABASE"),
+        user=os.environ.get("PGUSER"),
+        password=os.environ.get("PGPASSWORD"),
+        port=os.environ.get("PGPORT")
+    )
 
-# -------------------------
-# DB 연결
-# -------------------------
-def db():
-    conn = sqlite3.connect("data.db")
-    conn.row_factory = sqlite3.Row  # dict처럼 사용 가능
-    return conn
+# ================================
+# 테이블 생성
+# ================================
+def init_tables():
+    conn = get_conn()
+    cur = conn.cursor()
 
-
-# -------------------------
-# DB 초기화 + 컬럼 보정
-# -------------------------
-def init_db():
-    with db() as conn:
-        # 기본 테이블 생성
-        conn.execute("""
+    # 유저 테이블
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS users(
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             username TEXT UNIQUE,
             password TEXT,
             nickname TEXT,
-            is_admin INTEGER DEFAULT 0
-        )
-        """)
-        conn.execute("""
+            is_admin BOOLEAN DEFAULT FALSE
+        );
+    """)
+
+    # 장부 기록 테이블
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS records(
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             time TEXT,
             code TEXT,
             nickname TEXT,
             item TEXT
-        )
+        );
+    """)
+
+    # 기본 관리자 계정 생성
+    cur.execute("SELECT * FROM users WHERE username='blackstar'")
+    if cur.fetchone() is None:
+        cur.execute("""
+            INSERT INTO users (username, password, nickname, is_admin)
+            VALUES ('blackstar', 'Moon1422aa@!', '관리자', TRUE);
         """)
 
-        # 예전 DB에 컬럼이 없을 수도 있으니 보정
-        try:
-            conn.execute("SELECT is_admin FROM users LIMIT 1")
-        except sqlite3.OperationalError:
-            conn.execute("ALTER TABLE users ADD COLUMN is_admin INTEGER DEFAULT 0")
+    conn.commit()
+    cur.close()
+    conn.close()
 
-        try:
-            conn.execute("SELECT time FROM records LIMIT 1")
-        except sqlite3.OperationalError:
-            conn.execute("ALTER TABLE records ADD COLUMN time TEXT")
+init_tables()
 
-    # 기본 관리자 계정 생성 (없으면)
-    with db() as conn:
-        cur = conn.execute("SELECT id FROM users WHERE username = ?", ("blackstar",))
-        if cur.fetchone() is None:
-            conn.execute(
-                "INSERT INTO users (username, password, nickname, is_admin) VALUES (?, ?, ?, ?)",
-                ("blackstar", "Moon1422aa@!", "관리자", 1)
-            )
-
-
-init_db()
-
-
-# ------------------------------------
+# ================================
 # 로그인
-# ------------------------------------
-@app.route("/login", methods=["POST"])
+# ================================
+@app.post("/login")
 def login():
     data = request.json
-    username = data.get("username")
-    password = data.get("password")
+    conn = get_conn()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
 
-    with db() as conn:
-        cur = conn.execute(
-            "SELECT username, nickname, is_admin FROM users WHERE username=? AND password=?",
-            (username, password)
-        )
-        user = cur.fetchone()
+    cur.execute("SELECT * FROM users WHERE username=%s AND password=%s",
+                (data["username"], data["password"]))
+
+    user = cur.fetchone()
+    cur.close()
+    conn.close()
 
     if user:
-        return jsonify({
-            "success": True,
-            "username": user["username"],
-            "nickname": user["nickname"],
-            "is_admin": bool(user["is_admin"])
-        })
+        return jsonify({"success": True, "is_admin": user["is_admin"]})
     else:
         return jsonify({"success": False})
 
-
-# ------------------------------------
-# 회원가입 (일반 유저)
-# ------------------------------------
-@app.route("/join", methods=["POST"])
+# ================================
+# 회원가입
+# ================================
+@app.post("/join")
 def join():
     data = request.json
-    username = data.get("username")
-    password = data.get("password")
-    nickname = data.get("nickname")
-
-    if not username or not password or not nickname:
-        return jsonify({"success": False, "message": "필수값 누락"})
+    conn = get_conn()
+    cur = conn.cursor()
 
     try:
-        with db() as conn:
-            conn.execute(
-                "INSERT INTO users (username, password, nickname, is_admin) VALUES (?, ?, ?, 0)",
-                (username, password, nickname)
-            )
-        return jsonify({"success": True})
-    except sqlite3.IntegrityError:
-        return jsonify({"success": False, "message": "이미 존재하는 아이디입니다."})
+        cur.execute("""
+            INSERT INTO users (username, password, nickname, is_admin)
+            VALUES (%s, %s, %s, %s)
+        """, (data["username"], data["password"], data["nickname"], data.get("is_admin", False)))
 
+        conn.commit()
+        result = True
 
-# ------------------------------------
-# 관리자 추가 (관리자만 가능)
-# ------------------------------------
-@app.route("/add_admin", methods=["POST"])
-def add_admin():
-    data = request.json
-    admin_username = data.get("admin_username")  # 요청 보낸 사람
-    username = data.get("username")
-    password = data.get("password")
-    nickname = data.get("nickname")
+    except:
+        result = False
 
-    if not admin_username or not username or not password or not nickname:
-        return jsonify({"success": False, "message": "필수값 누락"})
+    cur.close()
+    conn.close()
+    return jsonify({"success": result})
 
-    with db() as conn:
-        cur = conn.execute(
-            "SELECT is_admin FROM users WHERE username=?",
-            (admin_username,)
-        )
-        u = cur.fetchone()
-        if not u or not bool(u["is_admin"]):
-            return jsonify({"success": False, "message": "관리자 권한 없음"})
-
-        try:
-            conn.execute(
-                "INSERT INTO users (username, password, nickname, is_admin) VALUES (?, ?, ?, 1)",
-                (username, password, nickname)
-            )
-            return jsonify({"success": True})
-        except sqlite3.IntegrityError:
-            return jsonify({"success": False, "message": "이미 존재하는 아이디입니다."})
-
-
-# ------------------------------------
-# 장부 작성
-# ------------------------------------
-@app.route("/add_record", methods=["POST"])
+# ================================
+# 장부 추가
+# ================================
+@app.post("/add_record")
 def add_record():
     data = request.json
-    code = data.get("code")
-    nickname = data.get("nickname")
-    item = data.get("item")
-
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    with db() as conn:
-        conn.execute(
-            "INSERT INTO records (time, code, nickname, item) VALUES (?, ?, ?, ?)",
-            (now, code, nickname, item)
-        )
+    conn = get_conn()
+    cur = conn.cursor()
+
+    cur.execute("""
+        INSERT INTO records (time, code, nickname, item)
+        VALUES (%s, %s, %s, %s)
+    """, (now, data["code"], data["nickname"], data["item"]))
+
+    conn.commit()
+    cur.close()
+    conn.close()
 
     return jsonify({"success": True})
 
-
-# ------------------------------------
-# 장부 기록 조회
-# ------------------------------------
-@app.route("/get_records", methods=["GET"])
+# ================================
+# 장부 기록 가져오기
+# ================================
+@app.get("/get_records")
 def get_records():
-    with db() as conn:
-        cur = conn.execute(
-            "SELECT id, time, code, nickname, item FROM records ORDER BY id DESC"
-        )
-        rows = cur.fetchall()
+    conn = get_conn()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
 
-    records = []
-    for r in rows:
-        records.append({
-            "id": r["id"],
-            "time": r["time"],
-            "code": r["code"],
-            "nickname": r["nickname"],
-            "item": r["item"],
-        })
+    cur.execute("SELECT * FROM records ORDER BY id DESC")
+    rows = cur.fetchall()
 
-    return jsonify(records)
+    cur.close()
+    conn.close()
+    return jsonify(rows)
 
-
-# ------------------------------------
-# 기록 삭제 (관리자만)
-# ------------------------------------
-@app.route("/delete_record", methods=["POST"])
+# ================================
+# 기록 삭제 (관리자 전용)
+# ================================
+@app.post("/delete_record")
 def delete_record():
-    data = request.json
-    username = data.get("username")
-    record_id = data.get("record_id")
+    data = request.json  # id 값 받음
 
-    if username is None or record_id is None:
-        return jsonify({"success": False, "message": "잘못된 요청"})
+    conn = get_conn()
+    cur = conn.cursor()
+    
+    cur.execute("DELETE FROM records WHERE id=%s", (data["id"],))
 
-    with db() as conn:
-        # 삭제 요청한 사람이 관리자냐?
-        cur = conn.execute(
-            "SELECT is_admin FROM users WHERE username=?",
-            (username,)
-        )
-        u = cur.fetchone()
-        if not u or not bool(u["is_admin"]):
-            return jsonify({"success": False, "message": "관리자 권한 없음"})
-
-        conn.execute("DELETE FROM records WHERE id=?", (record_id,))
+    conn.commit()
+    cur.close()
+    conn.close()
 
     return jsonify({"success": True})
 
-
+# ================================
+# 서버 시작
+# ================================
 if __name__ == "__main__":
-    app.run()
+    app.run(host="0.0.0.0", port=5000)
 
