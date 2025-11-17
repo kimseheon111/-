@@ -1,19 +1,22 @@
 from flask import Flask, request, jsonify
-from datetime import datetime
 import sqlite3
+from datetime import datetime
 
 app = Flask(__name__)
 
-# DB 연결 함수
+# =========================
+# DB 연결
+# =========================
 def get_db():
     conn = sqlite3.connect("data.db")
     conn.row_factory = sqlite3.Row
     return conn
 
-
-# DB 초기 구성 (users + records)
-with get_db() as conn:
-    conn.execute("""
+# =========================
+# DB 초기 생성
+# =========================
+with get_db() as db:
+    db.execute("""
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT UNIQUE,
@@ -22,104 +25,106 @@ with get_db() as conn:
             is_admin INTEGER DEFAULT 0
         )
     """)
-
-    conn.execute("""
+    db.execute("""
         CREATE TABLE IF NOT EXISTS records (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             time TEXT,
-            code TEXT,
+            username TEXT,
             nickname TEXT,
             item TEXT
         )
     """)
-
-    # 기본 관리자 계정
-    try:
-        conn.execute("""
-            INSERT INTO users (username, password, nickname, is_admin)
-            VALUES ('blackstar', 'Moon1422aa@!', '관리자', 1)
-        """)
-    except:
-        pass
+    db.commit()
 
 
-# -----------------------------------
+# =========================
 # 로그인 API
-# -----------------------------------
+# =========================
 @app.post("/login")
 def login():
     data = request.json
     username = data["username"]
     password = data["password"]
 
-    with get_db() as conn:
-        user = conn.execute(
-            "SELECT * FROM users WHERE username=? AND password=?",
-            (username, password)
-        ).fetchone()
-
-    if user:
-        return jsonify({"success": True})
-    else:
+    with get_db() as db:
+        user = db.execute("SELECT * FROM users WHERE username=? AND password=?",
+                          (username, password)).fetchone()
+        if user:
+            return jsonify({"success": True, "is_admin": user["is_admin"]})
         return jsonify({"success": False})
 
 
-# -----------------------------------
-# 회원가입 API
-# -----------------------------------
+# =========================
+# 회원가입 / 관리자 추가
+# =========================
 @app.post("/join")
 def join():
     data = request.json
     username = data["username"]
     password = data["password"]
     nickname = data["nickname"]
-    is_admin = data.get("is_admin", 0)
+    is_admin = int(data.get("is_admin", 0))
 
-    with get_db() as conn:
-        try:
-            conn.execute(
+    try:
+        with get_db() as db:
+            db.execute(
                 "INSERT INTO users (username, password, nickname, is_admin) VALUES (?, ?, ?, ?)",
                 (username, password, nickname, is_admin)
             )
-            return jsonify({"success": True})
-        except:
-            return jsonify({"success": False})
+            db.commit()
+        return jsonify({"success": True})
+    except:
+        return jsonify({"success": False})
 
 
-# -----------------------------------
-# 장부 추가 (★ 날짜 자동 저장)
-# -----------------------------------
+# =========================
+# 기록 추가
+# =========================
 @app.post("/add_record")
 def add_record():
     data = request.json
-    code = data["code"]
+    username = data["username"]
     nickname = data["nickname"]
     item = data["item"]
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    now_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    with get_db() as conn:
-        conn.execute(
-            "INSERT INTO records (time, code, nickname, item) VALUES (?, ?, ?, ?)",
-            (now, code, nickname, item)
+    with get_db() as db:
+        db.execute(
+            "INSERT INTO records (time, username, nickname, item) VALUES (?, ?, ?, ?)",
+            (now_time, username, nickname, item)
         )
+        db.commit()
+
     return jsonify({"success": True})
 
 
-# -----------------------------------
-# 장부 목록 가져오기
-# -----------------------------------
+# =========================
+# 기록 조회
+# =========================
 @app.get("/get_records")
 def get_records():
-    with get_db() as conn:
-        rows = conn.execute(
-            "SELECT * FROM records ORDER BY id DESC"
-        ).fetchall()
-
-    return jsonify([dict(row) for row in rows])
+    with get_db() as db:
+        rows = db.execute("SELECT * FROM records ORDER BY id DESC").fetchall()
+        return jsonify([dict(row) for row in rows])
 
 
-# -----------------------------------
+# =========================
+# 관리자 — 기록 삭제
+# =========================
+@app.post("/delete_record")
+def delete_record():
+    data = request.json
+    record_id = data["id"]
+
+    with get_db() as db:
+        db.execute("DELETE FROM records WHERE id=?", (record_id,))
+        db.commit()
+
+    return jsonify({"success": True})
+
+
+# =========================
 # 실행
-# -----------------------------------
+# =========================
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080)
