@@ -1,122 +1,125 @@
 from flask import Flask, request, jsonify
-import sqlite3
 from datetime import datetime
+import sqlite3
 
 app = Flask(__name__)
 
-def db():
+# DB 연결 함수
+def get_db():
     conn = sqlite3.connect("data.db")
     conn.row_factory = sqlite3.Row
     return conn
 
-# -----------------------------
-# DB 초기 테이블 생성
-# -----------------------------
-with db() as conn:
+
+# DB 초기 구성 (users + records)
+with get_db() as conn:
     conn.execute("""
-    CREATE TABLE IF NOT EXISTS users(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        username TEXT UNIQUE,
-        password TEXT,
-        nickname TEXT,
-        is_admin INTEGER DEFAULT 0
-    )
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE,
+            password TEXT,
+            nickname TEXT,
+            is_admin INTEGER DEFAULT 0
+        )
     """)
 
     conn.execute("""
-    CREATE TABLE IF NOT EXISTS records(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        code TEXT,
-        nickname TEXT,
-        item TEXT,
-        time TEXT
-    )
+        CREATE TABLE IF NOT EXISTS records (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            time TEXT,
+            code TEXT,
+            nickname TEXT,
+            item TEXT
+        )
     """)
 
-# 기본 관리자 계정 추가 (중복 생성 X)
-with db() as conn:
-    admin = conn.execute("SELECT * FROM users WHERE username = ?", ("blackstar",)).fetchone()
-    if not admin:
+    # 기본 관리자 계정
+    try:
         conn.execute("""
             INSERT INTO users (username, password, nickname, is_admin)
-            VALUES (?, ?, ?, 1)
-        """, ("blackstar", "Moon1422aa@!", "관리자"))
-        conn.commit()
-        print("기본 관리자 계정 생성 완료")
+            VALUES ('blackstar', 'Moon1422aa@!', '관리자', 1)
+        """)
+    except:
+        pass
 
-# -----------------------------
-# 로그인
-# -----------------------------
+
+# -----------------------------------
+# 로그인 API
+# -----------------------------------
 @app.post("/login")
 def login():
     data = request.json
-    with db() as conn:
+    username = data["username"]
+    password = data["password"]
+
+    with get_db() as conn:
         user = conn.execute(
             "SELECT * FROM users WHERE username=? AND password=?",
-            (data["username"], data["password"])
+            (username, password)
         ).fetchone()
 
     if user:
         return jsonify({"success": True})
-    return jsonify({"success": False})
+    else:
+        return jsonify({"success": False})
 
-# -----------------------------
-# 회원가입
-# -----------------------------
+
+# -----------------------------------
+# 회원가입 API
+# -----------------------------------
 @app.post("/join")
 def join():
     data = request.json
-    try:
-        with db() as conn:
-            conn.execute("""
-                INSERT INTO users (username, password, nickname, is_admin)
-                VALUES (?, ?, ?, ?)
-            """, (
-                data["username"],
-                data["password"],
-                data["nickname"],
-                1 if data.get("is_admin") else 0
-            ))
-        return jsonify({"success": True})
-    except:
-        return jsonify({"success": False})
+    username = data["username"]
+    password = data["password"]
+    nickname = data["nickname"]
+    is_admin = data.get("is_admin", 0)
 
-# -----------------------------
-# 장부 작성
-# -----------------------------
+    with get_db() as conn:
+        try:
+            conn.execute(
+                "INSERT INTO users (username, password, nickname, is_admin) VALUES (?, ?, ?, ?)",
+                (username, password, nickname, is_admin)
+            )
+            return jsonify({"success": True})
+        except:
+            return jsonify({"success": False})
+
+
+# -----------------------------------
+# 장부 추가 (★ 날짜 자동 저장)
+# -----------------------------------
 @app.post("/add_record")
 def add_record():
     data = request.json
-    with db() as conn:
-        conn.execute("""
-            INSERT INTO records (code, nickname, item, time)
-            VALUES (?, ?, ?, ?)
-        """, (
-            data["code"], data["nickname"], data["item"],
-            datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        ))
+    code = data["code"]
+    nickname = data["nickname"]
+    item = data["item"]
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    with get_db() as conn:
+        conn.execute(
+            "INSERT INTO records (time, code, nickname, item) VALUES (?, ?, ?, ?)",
+            (now, code, nickname, item)
+        )
     return jsonify({"success": True})
 
-# -----------------------------
-# 장부 기록 조회 (★★ 중요 수정 ★★)
-# -----------------------------
+
+# -----------------------------------
+# 장부 목록 가져오기
+# -----------------------------------
 @app.get("/get_records")
 def get_records():
-    with db() as conn:
-        rows = conn.execute("SELECT code, nickname, item FROM records ORDER BY id DESC").fetchall()
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT * FROM records ORDER BY id DESC"
+        ).fetchall()
 
-    result = []
-    for r in rows:
-        result.append({
-            "code": r["code"],
-            "nickname": r["nickname"],
-            "item": r["item"]
-        })
+    return jsonify([dict(row) for row in rows])
 
-    return jsonify(result)  # ★ 리스트로 반환해야 app.py가 정상 작동함!
 
-# -----------------------------
-# 서버 실행
-# -----------------------------
+# -----------------------------------
+# 실행
+# -----------------------------------
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080)
