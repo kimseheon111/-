@@ -1,65 +1,62 @@
+# =============================================
+# app.py  (PyQt5 클라이언트 / PostgreSQL 서버용)
+# =============================================
+
 import sys
 import requests
 from PyQt5.QtWidgets import *
 from PyQt5.QtGui import *
 from PyQt5.QtCore import *
 
-SERVER_URL = "https://accomplished-endurance-production.up.railway.app"
+SERVER_URL = "https://zonal-nature-production.up.railway.app"   # 네 서버 URL 넣기
 
-# =========================================
+# ---------------------------------------------
 #  로그인 UI
-# =========================================
+# ---------------------------------------------
 class LoginWindow(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("로그인")
-        self.setGeometry(700, 300, 500, 380)
+        self.setGeometry(700, 300, 480, 330)
 
         self.setStyleSheet("""
-            QWidget {
-                background-color: #2A2D32;
-                color: white;
-                font-size: 16px;
-            }
-            QLineEdit {
-                background-color: #1B1E23;
-                color: white;
-                padding: 8px;
-                border-radius: 5px;
-            }
-            QPushButton {
-                background-color: #4A57FF;
-                padding: 10px;
-                border-radius: 5px;
-            }
+            QWidget { background:#2A2D32; color:white; font-size:16px; }
+            QLineEdit { background:#1B1E23; padding:8px; border-radius:5px; }
+            QPushButton { background:#4A57FF; padding:10px; border-radius:5px; }
         """)
 
         layout = QVBoxLayout()
+
         title = QLabel("로그인")
         title.setAlignment(Qt.AlignCenter)
-        title.setStyleSheet("font-size: 32px; margin-bottom: 20px;")
+        title.setStyleSheet("font-size:32px; margin-bottom:20px;")
         layout.addWidget(title)
 
-        self.username = QLineEdit(); self.username.setPlaceholderText("아이디")
-        self.password = QLineEdit(); self.password.setPlaceholderText("비밀번호"); self.password.setEchoMode(QLineEdit.Password)
-        self.auto_login = QCheckBox("자동 로그인"); self.auto_login.setStyleSheet("margin-bottom: 10px;")
+        self.username = QLineEdit(); self.username.setPlaceholderText("고번 (아이디)")
+        self.password = QLineEdit(); self.password.setPlaceholderText("비밀번호")
+        self.password.setEchoMode(QLineEdit.Password)
 
         layout.addWidget(self.username)
         layout.addWidget(self.password)
-        layout.addWidget(self.auto_login)
 
-        login_btn = QPushButton("로그인")
-        login_btn.clicked.connect(self.try_login)
-        layout.addWidget(login_btn)
+        self.save_check = QCheckBox("자동 로그인")
+        layout.addWidget(self.save_check)
 
-        join_btn = QPushButton("회원가입")
-        join_btn.clicked.connect(self.open_join)
-        layout.addWidget(join_btn)
+        btn = QPushButton("로그인")
+        btn.clicked.connect(self.try_login)
+        layout.addWidget(btn)
+
+        join = QPushButton("회원가입")
+        join.clicked.connect(self.open_join)
+        layout.addWidget(join)
 
         self.setLayout(layout)
 
     def try_login(self):
-        data = { "username": self.username.text(), "password": self.password.text() }
+        data = {
+            "username": self.username.text(),
+            "password": self.password.text()
+        }
         res = requests.post(f"{SERVER_URL}/login", json=data).json()
 
         if res["success"]:
@@ -74,17 +71,23 @@ class LoginWindow(QWidget):
         self.join.show()
 
 
-
-# =========================================
-# 회원가입
-# =========================================
+# ---------------------------------------------
+#  회원가입 UI
+# ---------------------------------------------
 class JoinWindow(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("회원가입")
-        self.setGeometry(750, 350, 400, 300)
+        self.setGeometry(720, 340, 380, 280)
+
+        self.setStyleSheet("""
+            QWidget { background:#2A2D32; color:white; }
+            QLineEdit { background:#1B1E23; padding:8px; border-radius:5px; }
+            QPushButton { background:#4A57FF; padding:10px; border-radius:5px; }
+        """)
 
         layout = QVBoxLayout()
+
         self.username = QLineEdit(); self.username.setPlaceholderText("아이디")
         self.password = QLineEdit(); self.password.setPlaceholderText("비밀번호")
         self.nickname = QLineEdit(); self.nickname.setPlaceholderText("닉네임")
@@ -93,7 +96,7 @@ class JoinWindow(QWidget):
         layout.addWidget(self.password)
         layout.addWidget(self.nickname)
 
-        btn = QPushButton("가입")
+        btn = QPushButton("가입하기")
         btn.clicked.connect(self.join)
         layout.addWidget(btn)
 
@@ -103,20 +106,20 @@ class JoinWindow(QWidget):
         data = {
             "username": self.username.text(),
             "password": self.password.text(),
-            "nickname": self.nickname.text(),
+            "nickname": self.nickname.text()
         }
-
         res = requests.post(f"{SERVER_URL}/join", json=data).json()
+
         if res["success"]:
-            QMessageBox.information(self, "완료", "가입 성공!")
+            QMessageBox.information(self, "성공", "가입 완료!")
             self.close()
         else:
-            QMessageBox.warning(self, "오류", "이미 존재하는 계정")
+            QMessageBox.warning(self, "오류", "이미 존재하는 계정입니다.")
 
 
-# =========================================
-# 메인 프로그램
-# =========================================
+# ---------------------------------------------
+#  메인 프로그램
+# ---------------------------------------------
 class MainWindow(QWidget):
     def __init__(self, username, is_admin):
         super().__init__()
@@ -124,9 +127,18 @@ class MainWindow(QWidget):
         self.is_admin = is_admin
 
         self.setWindowTitle("장부 시스템")
-        self.setGeometry(500, 200, 1200, 700)
+        self.setGeometry(500, 200, 1100, 700)
 
-        main_layout = QHBoxLayout()
+        self.setStyleSheet("""
+            QWidget { background:#2A2D32; color:white; }
+            QListWidget { background:#1B1E23; font-size:16px; }
+            QLineEdit { background:#1B1E23; padding:10px; border-radius:5px; }
+            QPushButton { background:#4A57FF; padding:14px; border-radius:5px; }
+            QTableWidget { background:#1B1E23; }
+            QHeaderView::section { background:#111217; color:white; }
+        """)
+
+        main = QHBoxLayout()
 
         # 메뉴
         self.menu = QListWidget()
@@ -136,132 +148,140 @@ class MainWindow(QWidget):
             self.menu.addItem("관리자 추가")
         self.menu.currentRowChanged.connect(self.change_page)
 
-        # 페이지
+        # 페이지 스택
         self.stack = QStackedWidget()
-        self.stack.addWidget(self.page_write())
-        self.stack.addWidget(self.page_records())
+
+        self.stack.addWidget(self.page_write_ui())
+        self.stack.addWidget(self.page_records_ui())
         if is_admin:
-            self.stack.addWidget(self.page_admin())
+            self.stack.addWidget(self.page_admin_ui())
 
-        main_layout.addWidget(self.menu, 1)
-        main_layout.addWidget(self.stack, 4)
+        main.addWidget(self.menu)
+        main.addWidget(self.stack)
+        self.setLayout(main)
 
-        self.setLayout(main_layout)
-
-    # -----------------------------------
-    # 장부 작성
-    def page_write(self):
+    # -----------------------------
+    #  장부 작성 UI
+    # -----------------------------
+    def page_write_ui(self):
         w = QWidget()
-        layout = QVBoxLayout()
+        v = QVBoxLayout()
 
         self.code = QLineEdit(); self.code.setPlaceholderText("고유번호")
-        self.nickname = QLineEdit(); self.nickname.setPlaceholderText("닉네임")
+        self.nick = QLineEdit(); self.nick.setPlaceholderText("닉네임")
         self.item = QLineEdit(); self.item.setPlaceholderText("판매 항목")
 
         btn = QPushButton("작성하기")
         btn.clicked.connect(self.write_record)
 
-        layout.addWidget(self.code)
-        layout.addWidget(self.nickname)
-        layout.addWidget(self.item)
-        layout.addWidget(btn)
+        v.addWidget(self.code)
+        v.addWidget(self.nick)
+        v.addWidget(self.item)
+        v.addWidget(btn)
 
-        w.setLayout(layout)
+        w.setLayout(v)
         return w
 
-    # -----------------------------------
-    # 장부 기록
-    def page_records(self):
+    # -----------------------------
+    #  장부 기록 UI
+    # -----------------------------
+    def page_records_ui(self):
         w = QWidget()
-        layout = QVBoxLayout()
+        v = QVBoxLayout()
 
         self.table = QTableWidget()
         self.table.setColumnCount(5)
-        self.table.setHorizontalHeaderLabels(["ID", "시간", "고유번호", "닉네임", "항목"])
+        self.table.setHorizontalHeaderLabels(["ID", "고유번호", "닉네임", "항목", "시간"])
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
 
         refresh = QPushButton("새로고침")
         refresh.clicked.connect(self.load_records)
 
-        if self.is_admin:
-            del_btn = QPushButton("선택 삭제")
-            del_btn.clicked.connect(self.delete_record)
-            layout.addWidget(del_btn)
+        delete = QPushButton("선택 삭제 (관리자)")
+        delete.clicked.connect(self.delete_record)
+        if not self.is_admin:
+            delete.setDisabled(True)
 
-        layout.addWidget(self.table)
-        layout.addWidget(refresh)
-        w.setLayout(layout)
+        v.addWidget(self.table)
+        v.addWidget(refresh)
+        v.addWidget(delete)
+
+        w.setLayout(v)
         return w
 
-    # -----------------------------------
-    # 관리자 추가
-    def page_admin(self):
+    # -----------------------------
+    #  관리자 추가 UI
+    # -----------------------------
+    def page_admin_ui(self):
         w = QWidget()
-        layout = QVBoxLayout()
+        v = QVBoxLayout()
 
-        self.admin_id = QLineEdit(); self.admin_id.setPlaceholderText("관리자 아이디")
-        self.admin_pw = QLineEdit(); self.admin_pw.setPlaceholderText("비밀번호")
+        self.admin_user = QLineEdit(); self.admin_user.setPlaceholderText("관리자 아이디")
+        self.admin_pass = QLineEdit(); self.admin_pass.setPlaceholderText("비밀번호")
         self.admin_nick = QLineEdit(); self.admin_nick.setPlaceholderText("닉네임")
 
         btn = QPushButton("관리자 추가")
         btn.clicked.connect(self.add_admin)
 
-        layout.addWidget(self.admin_id)
-        layout.addWidget(self.admin_pw)
-        layout.addWidget(self.admin_nick)
-        layout.addWidget(btn)
+        v.addWidget(self.admin_user)
+        v.addWidget(self.admin_pass)
+        v.addWidget(self.admin_nick)
+        v.addWidget(btn)
+        w.setLayout(v)
 
-        w.setLayout(layout)
         return w
 
-    # -----------------------------------
+    # =============================
     # 기능들
+    # =============================
+    def change_page(self, idx):
+        self.stack.setCurrentIndex(idx)
+
     def write_record(self):
         data = {
             "code": self.code.text(),
-            "nickname": self.nickname.text(),
-            "item": self.item.text(),
+            "nickname": self.nick.text(),
+            "item": self.item.text()
         }
         requests.post(f"{SERVER_URL}/add_record", json=data)
-        QMessageBox.information(self, "완료", "등록 성공")
+        QMessageBox.information(self, "성공", "작성 완료!")
 
     def load_records(self):
         data = requests.get(f"{SERVER_URL}/get_records").json()
-        self.table.setRowCount(len(data))
 
+        self.table.setRowCount(len(data))
         for i, row in enumerate(data):
             self.table.setItem(i, 0, QTableWidgetItem(str(row["id"])))
-            self.table.setItem(i, 1, QTableWidgetItem(row["time"]))
-            self.table.setItem(i, 2, QTableWidgetItem(row["code"]))
-            self.table.setItem(i, 3, QTableWidgetItem(row["nickname"]))
-            self.table.setItem(i, 4, QTableWidgetItem(row["item"]))
+            self.table.setItem(i, 1, QTableWidgetItem(row["code"]))
+            self.table.setItem(i, 2, QTableWidgetItem(row["nickname"]))
+            self.table.setItem(i, 3, QTableWidgetItem(row["item"]))
+            self.table.setItem(i, 4, QTableWidgetItem(row["time"]))
 
     def delete_record(self):
-        selected = self.table.currentRow()
-        if selected < 0:
+        row = self.table.currentRow()
+        if row < 0:
             return
 
-        record_id = self.table.item(selected, 0).text()
+        record_id = self.table.item(row, 0).text()
         requests.post(f"{SERVER_URL}/delete_record", json={"id": record_id})
-
-        QMessageBox.information(self, "삭제", "삭제 완료")
+        QMessageBox.information(self, "삭제", "삭제 완료!")
         self.load_records()
 
     def add_admin(self):
         data = {
-            "username": self.admin_id.text(),
-            "password": self.admin_pw.text(),
+            "username": self.admin_user.text(),
+            "password": self.admin_pass.text(),
             "nickname": self.admin_nick.text(),
             "is_admin": True
         }
         requests.post(f"{SERVER_URL}/join", json=data)
-        QMessageBox.information(self, "추가", "관리자 추가 완료")
+        QMessageBox.information(self, "성공", "관리자 추가 완료!")
 
 
-# =========================================
+# ---------------------------------------------
 # 실행
-# =========================================
+# ---------------------------------------------
 app = QApplication(sys.argv)
-w = LoginWindow()
-w.show()
+win = LoginWindow()
+win.show()
 sys.exit(app.exec_())
