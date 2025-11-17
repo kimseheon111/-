@@ -4,12 +4,12 @@ import sqlite3
 
 app = Flask(__name__)
 
-# DB 연결
+# DB 연결 함수
 def db():
     conn = sqlite3.connect("data.db")
     return conn
 
-# 유저 테이블 생성
+# 유저 테이블
 with db() as conn:
     conn.execute("""
     CREATE TABLE IF NOT EXISTS users(
@@ -19,7 +19,7 @@ with db() as conn:
     )
     """)
 
-# 기록 테이블 생성
+# 장부 테이블
 with db() as conn:
     conn.execute("""
     CREATE TABLE IF NOT EXISTS records(
@@ -31,7 +31,26 @@ with db() as conn:
     )
     """)
 
-# 로그인 API
+# ✅ 회원가입 API
+@app.route("/register", methods=["POST"])
+def register():
+    data = request.json
+    username = data["username"]
+    password = data["password"]
+
+    with db() as conn:
+        try:
+            conn.execute(
+                "INSERT INTO users (username, password) VALUES (?, ?)",
+                (username, password),
+            )
+        except sqlite3.IntegrityError:
+            # 이미 있는 아이디인 경우
+            return jsonify({"success": False, "error": "duplicate"})
+
+    return jsonify({"success": True})
+
+# ✅ 로그인 API
 @app.route("/login", methods=["POST"])
 def login():
     data = request.json
@@ -39,7 +58,10 @@ def login():
     password = data["password"]
 
     with db() as conn:
-        cur = conn.execute("SELECT * FROM users WHERE username=? AND password=?", (username, password))
+        cur = conn.execute(
+            "SELECT * FROM users WHERE username=? AND password=?",
+            (username, password),
+        )
         user = cur.fetchone()
 
     if user:
@@ -47,7 +69,7 @@ def login():
     else:
         return jsonify({"success": False})
 
-# 장부 기록 추가
+# ✅ 장부 작성 API
 @app.route("/add_record", methods=["POST"])
 def add_record():
     data = request.json
@@ -57,20 +79,23 @@ def add_record():
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     with db() as conn:
-        conn.execute("INSERT INTO records (time, code, nickname, item) VALUES (?, ?, ?, ?)",
-                     (now, code, nickname, item))
+        conn.execute(
+            "INSERT INTO records (time, code, nickname, item) VALUES (?, ?, ?, ?)",
+            (now, code, nickname, item),
+        )
 
     return jsonify({"success": True})
 
-# 장부 전체 조회
+# ✅ 장부 기록 조회 API
 @app.route("/get_records", methods=["GET"])
 def get_records():
     with db() as conn:
-        cur = conn.execute("SELECT time, code, nickname, item FROM records ORDER BY id DESC")
+        cur = conn.execute(
+            "SELECT time, code, nickname, item FROM records ORDER BY id DESC"
+        )
         rows = cur.fetchall()
 
     return jsonify(rows)
 
-# 서버 실행
 if __name__ == "__main__":
     app.run()
